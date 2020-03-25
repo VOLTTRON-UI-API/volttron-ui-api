@@ -47,7 +47,7 @@ class Uiapiagent(Agent):
 
     def __init__(self, setting1=1, setting2="some/random/topic",
                  **kwargs):
-        super(Uiapiagent, self).__init__(**kwargs)
+        super(Uiapiagent, self).__init__(enable_web=True, **kwargs)
         _log.debug("vip_identity: " + self.core.identity)
 
         self.setting1 = setting1
@@ -109,6 +109,9 @@ class Uiapiagent(Agent):
 
         Usually not needed if using the configuration store.
         """
+        #Register Test Endpoint
+        self.vip.web.register_endpoint(r'/helloworld', lambda env,data: "Hello World!")
+
         #Example publish to pubsub
         #self.vip.pubsub.publish('pubsub', "some/random/topic", message="HI!")
 
@@ -131,9 +134,10 @@ class Uiapiagent(Agent):
         May be called from another agent via self.core.rpc.call """
         return self.setting1 + arg1 - arg2
 
+
 def main():
     """Main method called to start the agent."""
-    utils.vip_main(UIAPIAgent, 
+    utils.vip_main(UIAPIAgent,
                    version=__version__)
 
 
