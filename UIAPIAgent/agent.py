@@ -111,12 +111,61 @@ class Uiapiagent(Agent):
         """
         #Register Test Endpoint
         self.vip.web.register_endpoint(r'/helloworld', lambda env,data: "Hello World!")
+        self.vip.web.register_endpoint(r'/devices', self.endpoint_list_devices)
 
         #Example publish to pubsub
         #self.vip.pubsub.publish('pubsub', "some/random/topic", message="HI!")
 
         #Exmaple RPC call
         #self.vip.rpc.call("some_agent", "some_method", arg1, arg2)
+
+    def endpoint_list_devices(self, env, data):
+        """List devices on all platforms with point and status info.
+
+        Returns: JSON dict of devices nested by platform:
+        ```
+        {
+        "volttron1": {
+            "devices/fake-campus/fake-building/fake-device": {
+                "points": [
+                    "Heartbeat",
+                    "temperature",
+                    "PowerState",
+                    "ValveState",
+                    "EKG_Sin",
+                    "EKG_Cos"
+                ],
+                "health": {
+                    "status": "GOOD",
+                    "context": "Last received data on: 2020-04-02T01:39:10.025580+00:00",
+                    "last_updated": "2020-04-02T01:39:10.025729+00:00"
+                },
+                "last_publish_utc": "2020-04-02T01:39:10.025580+00:00"
+            }
+        }
+        }
+        ```
+        """
+        _log.debug('roanmh: Entered list_devices')
+
+        # Call and format core function
+        return self.list_devices()
+
+    def list_devices(self):
+        """List device information by platform."""
+        response = {}
+        for platform_connection_id in self.list_platform_connections():
+            platform_name = platform_connection_id.split('.')[0]
+            devices = self.vip.rpc.call(platform_connection_id, 'get_devices').get()
+            response[platform_name] = devices
+
+        return response
+
+    def list_platform_connections(self):
+        """List VCConnection agents which represent each platform."""
+        platform_connection_agents = [x for x in self.vip.peerlist().get(timeout=5)
+                     if x.startswith('vcp-') or x.endswith('.platform.agent')]
+        return platform_connection_agents
 
     @Core.receiver("onstop")
     def onstop(self, sender, **kwargs):
