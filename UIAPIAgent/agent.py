@@ -7,6 +7,7 @@ __docformat__ = 'reStructuredText'
 import logging
 import sys
 from volttron.platform.agent import utils
+from volttron.platform.agent.known_identities import *
 from volttron.platform.vip.agent import Agent, Core, RPC
 
 _log = logging.getLogger(__name__)
@@ -39,6 +40,34 @@ def UIAPIAgent(config_path, **kwargs):
                           setting2,
                           **kwargs)
 
+
+# TODO: Refactor to match RPC.export implementation
+_agent_routes = []
+def agent_route(route_regex):
+    '''Register decorated function at the given route.
+
+    Requires complementary code in `onstart` method.
+    Also Requires that function is exported RPC function. (i.e. decorated with @RPC.export)
+
+    NOTE: Accepts regex expressions
+    '''
+    def register_agent_route(method):
+        _agent_routes.append((route_regex, method))
+        return method
+    return register_agent_route
+
+_agent_endpoints = []
+def endpoint(endpoint_path):
+    '''Register decorated function at the given endpoint.
+
+    Requires complementary code in `onstart` method.
+
+    NOTE: Use agent_route for regex matching.
+    '''
+    def register_endpoint(method):
+        _agent_endpoints.append((endpoint_path, method))
+        return method
+    return register_endpoint
 
 class Uiapiagent(Agent):
     """
@@ -109,9 +138,14 @@ class Uiapiagent(Agent):
 
         Usually not needed if using the configuration store.
         """
-        #Register Test Endpoint
-        self.vip.web.register_endpoint(r'/helloworld', lambda env,data: "Hello World!")
-        self.vip.web.register_endpoint(r'/devices', self.endpoint_list_devices)
+
+        self.vip.web.register_endpoint(r'/helloworld', lambda env,data: "Hello World!") #Test Endpoint
+
+        # NOTE: See _agent_route and _endpoint decorators for how the functions are collected.
+        for route_regex, method in _agent_routes:
+            self.vip.rpc.call(MASTER_WEB, 'register_agent_route', route_regex, method.__name__).get(timeout=10)
+        for endpoint_path, method in _agent_endpoints:
+            self.vip.web.register_endpoint(endpoint_path, method)
 
         #Example publish to pubsub
         #self.vip.pubsub.publish('pubsub', "some/random/topic", message="HI!")
@@ -119,6 +153,8 @@ class Uiapiagent(Agent):
         #Exmaple RPC call
         #self.vip.rpc.call("some_agent", "some_method", arg1, arg2)
 
+    @endpoint(r'/devices')
+    @RPC.export
     def endpoint_list_devices(self, env, data):
         """List devices on all platforms with point and status info.
 
@@ -151,6 +187,16 @@ class Uiapiagent(Agent):
         # Call and format core function
         return self.list_devices()
 
+    @agent_route(r'/points/.*')
+    @RPC.export
+    def endpoint_point(self, env, data):
+        """Show or set data of a given endpoint.
+
+        Returns: JSON dict of point data.
+        """
+
+        return "Test"
+
     def list_devices(self):
         """List device information by platform."""
         response = {}
@@ -173,7 +219,8 @@ class Uiapiagent(Agent):
         This method is called when the Agent is about to shutdown, but before it disconnects from
         the message bus.
         """
-        pass
+        self.vip.web.unregister_all_routes()
+
 
     @RPC.export
     def rpc_method(self, arg1, arg2, kwarg1=None, kwarg2=None):
