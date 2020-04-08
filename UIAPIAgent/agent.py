@@ -5,7 +5,9 @@ Agent documentation goes here.
 __docformat__ = 'reStructuredText'
 
 import logging
+import requests
 import sys
+from token_handler import TokenHandler
 from volttron.platform.agent import utils
 from volttron.platform.agent.known_identities import *
 from volttron.platform.vip.agent import Agent, Core, RPC
@@ -85,6 +87,7 @@ class Uiapiagent(Agent):
         self.default_config = {"setting1": setting1,
                                "setting2": setting2}
 
+        self._auth = TokenHandler()
 
         #Set a default configuration to ensure that self.configure is called immediately to setup
         #the agent.
@@ -200,8 +203,9 @@ class Uiapiagent(Agent):
 
         Returns: JSON dict of point data.
         """
-
-        return "Test"
+        if self.check_authorization(env, data):
+            return "Test"
+        return "Unauthorized"
 
     def list_devices(self):
         """List device information by platform."""
@@ -218,6 +222,76 @@ class Uiapiagent(Agent):
         platform_connection_agents = [x for x in self.vip.peerlist().get(timeout=5)
                      if x.startswith('vcp-') or x.endswith('.platform.agent')]
         return platform_connection_agents
+
+    def _make_token(self, data, env):
+        """Generate an API token if authorized"""
+        if 'username' not in data or 'password' not in data:
+            return "Username and password must be specified."
+
+        # TODO Return early since auth is not yet working
+        token = self._auth.generate_token(data['username'],
+                                          data['password'])
+        return { 'token' : token }
+        # TODO Remove to here
+
+        # Check if user information is correct
+        auth_url = "{url_scheme}://{HTTP_HOST}/authenticate".format(
+            url_scheme=env['wsgi.url_scheme'],
+            HTTP_HOST=env['HTTP_HOST'])
+        args = {'username': data['username'],
+                'password': data['password'],
+                'ip': env['REMOTE_ADDR']}
+        resp = requests.post(auth_url, json=args, verify=False)
+
+        if resp.ok and resp.text:
+            token = self._auth.generate_token(data['username'],
+                                              data['password'])
+            return { 'token' : token }
+        else:
+            return "Invalid username/password specified."
+
+    def _get_token(self, data, env):
+        """Retrieve API token"""
+        # if username or password are missing, specify correct format
+        if 'username' not in data or 'password' not in data:
+            return { 'username': '',
+                     'password': '',
+                     'token':    '' }
+
+        token = self._auth.retrieve_token(data['username'],
+                                          data['password'])
+        if token:
+            return { 'token': token }
+
+        return "No token available for specified username/password."
+
+    def _remove_token(self, data, env):
+        """Remove API token for specified user"""
+        if 'username' not in data or 'password' not in data:
+            return "Username and password must be specified."
+
+        return self._auth.remove_token(data['username'], data['password'])
+
+    @endpoint(r'/auth')
+    def handle_auth(self, env, data):
+        """Handle requests to the auth endpoint"""
+        methods = { 'POST':     self._make_token,
+                    'GET':      self._get_token,
+                    'DELETE':   self._remove_token }
+
+        request_method = env['REQUEST_METHOD'].upper()
+        if request_method in methods:
+            return methods[request_method](data, env)
+
+        return "Method not supported."
+
+    def check_authorization(self, env, data):
+        """Verify API token"""
+        try:
+            token = env['HTTP_AUTHORIZATION'].split()[1]
+            return self._auth.validate_token(token)
+        except (KeyError, IndexError):
+            return False
 
     @Core.receiver("onstop")
     def onstop(self, sender, **kwargs):
