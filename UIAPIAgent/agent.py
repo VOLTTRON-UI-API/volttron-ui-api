@@ -52,7 +52,7 @@ def agent_route(route_regex):
     NOTE: Accepts regex expressions
     '''
     def register_agent_route(method):
-        _agent_routes.append((route_regex, method))
+        _agent_routes.append((route_regex, method.__name__))
         return method
     return register_agent_route
 
@@ -65,7 +65,7 @@ def endpoint(endpoint_path):
     NOTE: Use agent_route for regex matching.
     '''
     def register_endpoint(method):
-        _agent_endpoints.append((endpoint_path, method))
+        _agent_endpoints.append((endpoint_path, method.__name__))
         return method
     return register_endpoint
 
@@ -142,10 +142,11 @@ class Uiapiagent(Agent):
         self.vip.web.register_endpoint(r'/helloworld', lambda env,data: "Hello World!") #Test Endpoint
 
         # NOTE: See _agent_route and _endpoint decorators for how the functions are collected.
-        for route_regex, method in _agent_routes:
-            self.vip.rpc.call(MASTER_WEB, 'register_agent_route', route_regex, method.__name__).get(timeout=10)
-        for endpoint_path, method in _agent_endpoints:
-            self.vip.web.register_endpoint(endpoint_path, method)
+        for route_regex, method_name in _agent_routes:
+            self.vip.rpc.call(MASTER_WEB, 'register_agent_route', route_regex, method_name).get(timeout=10)
+        for endpoint_path, method_name in _agent_endpoints:
+            _log.debug((endpoint_path, method_name))
+            self.vip.web.register_endpoint(endpoint_path, getattr(self, method_name))
 
         #Example publish to pubsub
         #self.vip.pubsub.publish('pubsub', "some/random/topic", message="HI!")
@@ -154,7 +155,6 @@ class Uiapiagent(Agent):
         #self.vip.rpc.call("some_agent", "some_method", arg1, arg2)
 
     @endpoint(r'/devices')
-    @RPC.export
     def endpoint_list_devices(self, env, data):
         """List devices on all platforms with point and status info.
 
@@ -186,6 +186,12 @@ class Uiapiagent(Agent):
 
         # Call and format core function
         return self.list_devices()
+
+    @agent_route(r'/devices/.*')
+    @RPC.export
+    def enpoint_device(self, env, data):
+        device_name = env['PATH_INFO'].replace('/devices/', '', 1)
+        return device_name
 
     @agent_route(r'/points/.*')
     @RPC.export
