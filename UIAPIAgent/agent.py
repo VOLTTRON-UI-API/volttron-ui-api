@@ -157,8 +157,8 @@ class Uiapiagent(Agent):
         #Exmaple RPC call
         #self.vip.rpc.call("some_agent", "some_method", arg1, arg2)
 
-    @endpoint(r'/devices')
-    def endpoint_list_devices(self, env, data):
+    @endpoint(r'/devices/heirarchy')
+    def endpoint_devices_heirarchy(self, env, data):
         """List devices on all platforms with point and status info.
 
         Returns: JSON dict of devices nested by platform:
@@ -185,15 +185,44 @@ class Uiapiagent(Agent):
         }
         ```
         """
-        _log.debug('roanmh: Entered list_devices')
 
         # Call and format core function
-        return self.list_devices()
+        return self.devices_heirarchy()
+
+    @endpoint(r'/devices')
+    def endpoint_devices_list(self, env, data):
+        """List devices on all platforms with point and status info.
+
+        Returns: JSON dict of device objects:
+        ```
+        {
+        "/devices/fake-campus/fake-building/fake-device": {
+            "platform": "volttron1",
+            "link": "/devices/volttron1/fake-campus/fake-building/fake-device"
+        }
+        ```
+        """
+
+        # Call and format core function
+        response = {}
+        for platform, device in self.devices_list():
+            # TODO: Throw Error if device name collision (Must return a list of 3 items [status,
+            #       content, headers], see create_response in master_web_service.py)
+            response[device] = {
+                "platform": platform,
+                "link": '/devices/' + platform + device.replace(r'devices', '', 1)
+            }
+
+        return response
 
     @agent_route(r'/devices/.*')
     @RPC.export
     def enpoint_device(self, env, data):
-        device_name = env['PATH_INFO'].replace('/devices/', '', 1)
+        path_components = env['PATH_INFO'].split('/')[1:]  # First slash creates empty element
+        platform = path_components[1]
+        platform_connection_agent_id = '.'.join([platform, VOLTTRON_CENTRAL_PLATFORM])
+        device_name = '/'.join([path_components[0], *path_components[2:]])
+
         return device_name
 
     @agent_route(r'/points/.*')
@@ -207,7 +236,16 @@ class Uiapiagent(Agent):
             return "Test"
         return "Unauthorized"
 
-    def list_devices(self):
+    def devices_list(self):
+        response = []
+        for platform, plat_devices in self.devices_heirarchy().items():
+            for devices in plat_devices.keys():
+                response.append((platform, devices))
+
+        _log.debug(f"devices_list is: {response}")
+        return response
+
+    def devices_heirarchy(self):
         """List device information by platform."""
         response = {}
         for platform_connection_id in self.list_platform_connections():
