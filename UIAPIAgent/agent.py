@@ -7,7 +7,7 @@ __docformat__ = 'reStructuredText'
 import logging
 import requests
 import sys
-from token_handler import TokenHandler
+from .token_handler import TokenHandler
 from volttron.platform.agent import utils
 from volttron.platform.agent.known_identities import *
 from volttron.platform.vip.agent import Agent, Core, RPC
