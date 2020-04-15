@@ -43,6 +43,45 @@ def UIAPIAgent(config_path, **kwargs):
                           **kwargs)
 
 
+def format_response(code, body=None):
+    response_code = {
+        200: {
+            'code':   '200 OK',
+            'body':   body,
+            'header': [('Content-Type', 'application/json'),
+                       ('Access-Control-Allow-Origin', '*')]
+
+        },
+
+        401: {
+            'code':   '401 Unauthorized',
+            'body':   '{"message":"Access denied"}',
+            'header':  [('Content-Type', 'application/json'),
+                        ('Access-Control-Allow-Origin', '*')]
+
+       },
+
+        400: {
+            'code':   '400 Bad Request',
+            'body':   '{"message": "Internal Error: Bad Code"}',
+            'header': [('Content-Type', 'application/json'),
+                       ('Access-Control-Allow-Origin', '*')]
+        },
+
+        'preflight': {
+            'code':   '200 OK',
+            'body':   '',
+            'headers': [('Access-Control-Allow-Origin', '*'),
+            ('Access-Control-Allow-Methods', 'POST, GET, OPTIONS, DELETE'),
+            ('Access-Control-Allow-Headers', 'Content-Type')]
+        }
+    }
+    try:
+        response = list(response_code[code].values())
+        return response
+    except KeyError:
+        return list(response_code[400].values())
+
 # TODO: Refactor to match RPC.export implementation
 _agent_routes = []
 def agent_route(route_regex):
@@ -326,9 +365,11 @@ class Uiapiagent(Agent):
     def check_authorization(self, env, data):
         """Verify API token"""
         try:
-            token = env['HTTP_AUTHORIZATION'].split()[1]
-            return self._auth.validate_token(token)
-        except (KeyError, IndexError):
+            auth_type, token = env['HTTP_AUTHORIZATION'].split()
+            if auth_type.upper() == "BASIC":
+                return self._auth.validate_token(token)
+            return False
+        except (KeyError, IndexError,ValueError):
             return False
 
     @Core.receiver("onstop")
