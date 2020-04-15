@@ -232,6 +232,14 @@ class Uiapiagent(Agent):
         # Call and format core function
         return self.devices_hierarchy()
 
+    @endpoint(r'/platforms')
+    def endpoint_platfoms_list(self, env, data):
+        """List all platform names under the 'platforms' key.
+
+        TODO: Link to further endpoints."""
+
+        return {platform:None for platform in self.devices_hierarchy().keys()}
+
     @endpoint(r'/devices')
     def endpoint_devices_list(self, env, data):
         """List devices on all platforms with point and status info.
