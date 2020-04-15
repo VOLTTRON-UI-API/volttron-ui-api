@@ -12,6 +12,7 @@ from volttron.platform.agent import utils
 from volttron.platform.agent.known_identities import *
 from volttron.platform.vip.agent import Agent, Core, RPC
 
+
 _log = logging.getLogger(__name__)
 utils.setup_logging()
 __version__ = "0.1"
@@ -93,6 +94,7 @@ def agent_route(route_regex):
     NOTE: Accepts regex expressions
     '''
     def register_agent_route(method):
+        # Must store names to avoid method vs. function weirdness
         _agent_routes.append((route_regex, method.__name__))
         return method
     return register_agent_route
@@ -106,9 +108,11 @@ def endpoint(endpoint_path):
     NOTE: Use agent_route for regex matching.
     '''
     def register_endpoint(method):
+        # Must store names to avoid method vs. function weirdness
         _agent_endpoints.append((endpoint_path, method.__name__))
         return method
     return register_endpoint
+
 
 class Uiapiagent(Agent):
     """
@@ -196,8 +200,8 @@ class Uiapiagent(Agent):
         #Exmaple RPC call
         #self.vip.rpc.call("some_agent", "some_method", arg1, arg2)
 
-    @endpoint(r'/devices/heirarchy')
-    def endpoint_devices_heirarchy(self, env, data):
+    @endpoint(r'/devices/hierarchy')
+    def endpoint_devices_hierarchy(self, env, data):
         """List devices on all platforms with point and status info.
 
         Returns: JSON dict of devices nested by platform:
@@ -226,7 +230,7 @@ class Uiapiagent(Agent):
         """
 
         # Call and format core function
-        return self.devices_heirarchy()
+        return self.devices_hierarchy()
 
     @endpoint(r'/devices')
     def endpoint_devices_list(self, env, data):
@@ -256,13 +260,91 @@ class Uiapiagent(Agent):
 
     @agent_route(r'/devices/.*')
     @RPC.export
-    def enpoint_device(self, env, data):
+    def endpoint_device_or_point(self, env, data):
+        """Route Multiple endpoints relating to specific devices.
+
+        Routes requests based on path info and request method to either:
+        - Device Index: A list of links to the available endpoints
+        - All Points: A list of points on the device and their current value
+            TODO: Format response to be more RESTful
+        - Health: (Not Implemented)
+        - Last Published: (Not Implemented)
+
+        Returns: A json dict with the response. (TODO: Implement Errors)
+        """
         path_components = env['PATH_INFO'].split('/')[1:]  # First slash creates empty element
         platform = path_components[1]
-        platform_connection_agent_id = '.'.join([platform, VOLTTRON_CENTRAL_PLATFORM])
-        device_name = '/'.join([path_components[0], *path_components[2:]])
 
-        return device_name
+        if path_components[-1] == 'all':
+            device_name = '/'.join(path_components[2:-1])
+            return self.device_scrape_all(platform, device_name)
+        # TODO Health and Last Publish Endpoint routing here
+
+        if path_components[-2] == 'pt':
+            if env['REQUEST_METHOD'] == 'GET':
+                device_name = '/'.join(path_components[2:-2])
+                point_name = path_components[-1]
+                # return self.get_point(platform, device_name, point_name)
+                value = self.get_point(platform, device_name, point_name)
+                return {'value': value,
+                        'type': value.__class__.__name__}
+            if env['REQUEST_METHOD'] == 'POST':
+                device_name = '/'.join(path_components[2:-2])
+                point_name = path_components[-1]
+                value = data['value']
+                value = self.set_point(platform, device_name, point_name, value)
+                return {'value': value,
+                        'type': value.__class__.__name__}
+
+        else:
+            device_name = '/'.join(path_components[2:])
+            return self.device_index(platform, device_name)
+
+    def get_point(self, platform, device_name, point_name):
+        platform_connection_agent_id = '.'.join([platform, VOLTTRON_CENTRAL_PLATFORM])
+
+        result = self.vip.rpc.call(
+            platform_connection_agent_id,
+            'route_to_agent_method',
+            'endpoint_device',  # JSONRPC request ID
+            'platform.uuid.{}.get_point'.format(self.get_agent_uuid(platform, PLATFORM_DRIVER)),
+            [device_name, point_name]
+        ).get()
+        return result
+
+    def set_point(self, platform, device_name, point_name, value):
+        platform_connection_agent_id = '.'.join([platform, VOLTTRON_CENTRAL_PLATFORM])
+
+        result = self.vip.rpc.call(
+            platform_connection_agent_id,
+            'route_to_agent_method',
+            'endpoint_device',  # JSONRPC request ID
+            'platform.uuid.{}.set_point'.format(self.get_agent_uuid(platform, PLATFORM_DRIVER)),
+            [device_name, point_name, value]
+        ).get()
+        return result
+
+    def device_index(self, platform, device_name):
+        # TODO: Handle incorrect device
+        self.device_scrape_all(platform, device_name)
+
+        device_endpoints = ['all']
+        # TODO: Implement auxillary device endpoints
+        # device_endpoints = ['all', 'health', 'last_publish']
+        response = {"links": {endpt: f"/devices/{platform}/{device_name}/{endpt}" for endpt in device_endpoints}}
+        return response
+
+    def device_scrape_all(self, platform, device_name):
+        platform_connection_agent_id = '.'.join([platform, VOLTTRON_CENTRAL_PLATFORM])
+
+        result = self.vip.rpc.call(
+            platform_connection_agent_id,
+            'route_to_agent_method',
+            'endpoint_device',  # JSONRPC request ID
+            'platform.uuid.{}.scrape_all'.format(self.get_agent_uuid(platform, PLATFORM_DRIVER)),
+            [device_name]
+        ).get()
+        return result
 
     @agent_route(r'/points/.*')
     @RPC.export
@@ -277,14 +359,14 @@ class Uiapiagent(Agent):
 
     def devices_list(self):
         response = []
-        for platform, plat_devices in self.devices_heirarchy().items():
+        for platform, plat_devices in self.devices_hierarchy().items():
             for devices in plat_devices.keys():
                 response.append((platform, devices))
 
         _log.debug(f"devices_list is: {response}")
         return response
 
-    def devices_heirarchy(self):
+    def devices_hierarchy(self):
         """List device information by platform."""
         response = {}
         for platform_connection_id in self.list_platform_connections():
@@ -299,6 +381,15 @@ class Uiapiagent(Agent):
         platform_connection_agents = [x for x in self.vip.peerlist().get(timeout=5)
                      if x.startswith('vcp-') or x.endswith('.platform.agent')]
         return platform_connection_agents
+
+    def get_agent_uuid(self, platform, agent_id):
+        platform_connection_agent = '.'.join([platform, "platform.agent"])
+        agents = self.vip.rpc.call(platform_connection_agent, "list_agents").get()
+        # Return first match for the master driver agent, raise error
+        try:
+            return next(agent for agent in agents if agent['identity'] == agent_id)['uuid']
+        except StopIteration:
+            raise RuntimeError(f"No agent '{agent}' on platform '{platform}'")
 
     def _make_token(self, data, env):
         """Generate an API token if authorized"""
