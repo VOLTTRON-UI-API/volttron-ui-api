@@ -334,6 +334,24 @@ class Uiapiagent(Agent):
             device_name = '/'.join(path_components[2:])
             return self.device_index(platform, device_name)
 
+    @endpoint(r'/auth')
+    def handle_auth(self, env, data):
+        """Handle requests to the auth endpoint"""
+
+        # Handle CORS
+        if env['REQUEST_METHOD'].upper() == 'OPTIONS':
+            return format_response('preflight')
+
+        methods = { 'POST':     self.make_token,
+                    'GET':      self.get_token,
+                    'DELETE':   self.remove_token }
+
+        request_method = env['REQUEST_METHOD'].upper()
+        if request_method in methods:
+            return methods[request_method](data, env)
+
+        return "Method not supported."
+
     def get_point(self, platform, device_name, point_name):
         platform_connection_agent_id = '.'.join([platform, VOLTTRON_CENTRAL_PLATFORM])
 
@@ -414,7 +432,7 @@ class Uiapiagent(Agent):
         except StopIteration:
             raise RuntimeError(f"No agent '{agent}' on platform '{platform}'")
 
-    def _make_token(self, data, env):
+    def make_token(self, data, env):
         """Generate an API token if authorized"""
         if 'username' not in data or 'password' not in data:
             return "Username and password must be specified."
@@ -441,7 +459,7 @@ class Uiapiagent(Agent):
         else:
             return "Invalid username/password specified."
 
-    def _get_token(self, data, env):
+    def get_token(self, data, env):
         """Retrieve API token"""
         # if username or password are missing, specify correct format
         if 'username' not in data or 'password' not in data:
@@ -456,30 +474,12 @@ class Uiapiagent(Agent):
 
         return "No token available for specified username/password."
 
-    def _remove_token(self, data, env):
+    def remove_token(self, data, env):
         """Remove API token for specified user"""
         if 'username' not in data or 'password' not in data:
             return "Username and password must be specified."
 
         return self._auth.remove_token(data['username'], data['password'])
-
-    @endpoint(r'/auth')
-    def handle_auth(self, env, data):
-        """Handle requests to the auth endpoint"""
-
-        # Handle CORS
-        if env['REQUEST_METHOD'].upper() == 'OPTIONS':
-            return format_response('preflight')
-
-        methods = { 'POST':     self._make_token,
-                    'GET':      self._get_token,
-                    'DELETE':   self._remove_token }
-
-        request_method = env['REQUEST_METHOD'].upper()
-        if request_method in methods:
-            return methods[request_method](data, env)
-
-        return "Method not supported."
 
     def check_authorization(self, env, data):
         """Verify API token"""
