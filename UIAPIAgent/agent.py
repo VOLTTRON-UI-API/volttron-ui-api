@@ -4,6 +4,7 @@ Agent documentation goes here.
 
 __docformat__ = 'reStructuredText'
 
+import json
 import logging
 import requests
 import sys
@@ -48,7 +49,7 @@ def format_response(code, body=None):
     response_code = {
         200: {
             'code':   '200 OK',
-            'body':   body,
+            'body':   body if isinstance(body, str) else json.dumps(body),
             'header': [('Content-Type', 'application/json'),
                        ('Access-Control-Allow-Origin', '*')]
 
@@ -229,6 +230,12 @@ class Uiapiagent(Agent):
         ```
         """
 
+        # Auth and CORS handling
+        if env['REQUEST_METHOD'].upper() == 'OPTIONS':
+            return format_response('preflight')
+        if not self.check_authorization(env, data):
+            return format_response(401)
+
         # Call and format core function
         return self.devices_hierarchy()
 
@@ -237,6 +244,12 @@ class Uiapiagent(Agent):
         """List all platform names under the 'platforms' key.
 
         TODO: Link to further endpoints."""
+
+        # Auth and CORS handling
+        if env['REQUEST_METHOD'].upper() == 'OPTIONS':
+            return format_response('preflight')
+        if not self.check_authorization(env, data):
+            return format_response(401)
 
         return {platform:None for platform in self.devices_hierarchy().keys()}
 
@@ -253,6 +266,12 @@ class Uiapiagent(Agent):
         }
         ```
         """
+
+        # Auth and CORS handling
+        if env['REQUEST_METHOD'].upper() == 'OPTIONS':
+            return format_response('preflight')
+        if not self.check_authorization(env, data):
+            return format_response(401)
 
         # Call and format core function
         response = {}
@@ -280,6 +299,13 @@ class Uiapiagent(Agent):
 
         Returns: A json dict with the response. (TODO: Implement Errors)
         """
+
+        # Auth and CORS handling
+        if env['REQUEST_METHOD'].upper() == 'OPTIONS':
+            return format_response('preflight')
+        if not self.check_authorization(env, data):
+            return format_response(401)
+
         path_components = env['PATH_INFO'].split('/')[1:]  # First slash creates empty element
         platform = path_components[1]
 
@@ -451,6 +477,11 @@ class Uiapiagent(Agent):
     @endpoint(r'/auth')
     def handle_auth(self, env, data):
         """Handle requests to the auth endpoint"""
+
+        # Handle CORS
+        if env['REQUEST_METHOD'].upper() == 'OPTIONS':
+            return format_response('preflight')
+
         methods = { 'POST':     self._make_token,
                     'GET':      self._get_token,
                     'DELETE':   self._remove_token }
