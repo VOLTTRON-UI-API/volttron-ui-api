@@ -380,17 +380,6 @@ class Uiapiagent(Agent):
         ).get()
         return result
 
-    @agent_route(r'/points/.*')
-    @RPC.export
-    def endpoint_point(self, env, data):
-        """Show or set data of a given endpoint.
-
-        Returns: JSON dict of point data.
-        """
-        if self.check_authorization(env, data):
-            return "Test"
-        return "Unauthorized"
-
     def devices_list(self):
         response = []
         for platform, plat_devices in self.devices_hierarchy().items():
