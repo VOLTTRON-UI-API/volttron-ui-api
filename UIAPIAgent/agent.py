@@ -226,7 +226,6 @@ class Uiapiagent(Agent):
                 "last_publish_utc": "2020-04-02T01:39:10.025580+00:00"
             }
         }
-        }
         ```
         """
 
@@ -260,9 +259,10 @@ class Uiapiagent(Agent):
         Returns: JSON dict of device objects:
         ```
         {
-        "/devices/fake-campus/fake-building/fake-device": {
-            "platform": "volttron1",
-            "link": "/devices/volttron1/fake-campus/fake-building/fake-device"
+            "/devices/fake-campus/fake-building/fake-device": {
+                "platform": "volttron1",
+                "link": "/devices/volttron1/fake-campus/fake-building/fake-device"
+            }
         }
         ```
         """
@@ -464,8 +464,7 @@ class Uiapiagent(Agent):
         # if username or password are missing, specify correct format
         if 'username' not in data or 'password' not in data:
             return { 'username': '',
-                     'password': '',
-                     'token':    '' }
+                     'password': ''}
 
         token = self._auth.retrieve_token(data['username'],
                                           data['password'])
