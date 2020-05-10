@@ -20,7 +20,105 @@ The REST Architecture is a well known standard for creating usable and robust AP
 
 The API is implemented in a single agent, which allows easy installation. The agent only requires the VOLTTRON Central Platform Agent and whatever agents are called for by the use-case. The agent does not rely on VOLLTRON Central.
 
+
+## Installation
+
+  - cd to volttron repository root
+  - Clone repository into the volttron repository
+  
+    `git clone git@github.com:VOLTTRON-UI-API/volttron-ui-api.git`
+    
+    or
+    
+    `git clone https://github.com/VOLTTRON-UI-API/volttron-ui-api.git`
+ 
+ - Activate volttron environment
+  
+    `. env/bin/activate`
+    
+  - Start volttron
+  
+    `./start-volttron` (or another method)
+    
+  - Run install-agent (`--start` and `--enable` optional)
+  
+    `python scripts/install-agent.py -s volttron-ui-api -c volttron-ui-api/config -t uiapi --start --enable`
+    
+  - Test agent (once running) at `https://<host>:8443/helloworld`
+
 ## Interface
+
+
+### Auth
+
+A Valid token is required for all other endpoints. The Token is created here and used by including a header in the request with the name `Authorization` and value `BASIC <token>`.
+
+---
+#### `/auth` | `GET` 
+
+Returns token attached to specified username and password.
+
+- **Request Body:** *Empty*
+
+  **Response Body:**
+  
+  ```json
+  {
+      "username": "",	
+      "password": ""
+  }
+  ```
+
+- **Request Body:**
+
+  ```json
+  {
+      "username": "<username>",
+      "password": "<password>"
+  }
+  ```
+  
+  **Response Body:**
+  
+  - With valid username and password:
+	  ```json
+	  {
+		    "token": "<token>"
+	  }
+	  ```
+
+  - With invalid username and password: `200 No token available for specified username/password.`
+
+    *NOTE:* The response code should be changed to an error code, not 200.
+  
+---
+
+#### `/auth` | `POST` 
+
+Returns and attaches token to specified username and password.
+
+**Request Body:**
+
+```json
+{
+    "username": "username",
+    "password": "<password>"
+}
+```
+
+**Response Body:**
+- With valid username and password:
+  ```json
+  {
+      "token": "<token>"
+  }
+  ```
+
+- With invalid username and password: `200 Invalid username/password specified.`
+
+  *NOTE:* The response code should be changed to an error code, not 200.
+
+---
 
 ### Platform Tree
 
@@ -381,99 +479,3 @@ Returns list of devices on all platforms with point and status info.
     }
 }
 ```
-
----
-
-### Auth
-
-A Valid token is required for all other endpoints. The Token is created here and used by including a header in the request with the name `Authorization` and value `BASIC <token>`.
-
----
-#### `/auth` | `GET` 
-
-Returns token attached to specified username and password.
-
-- **Request Body:** *Empty*
-
-  **Response Body:**
-  
-  ```json
-  {
-      "username": "",	
-      "password": ""
-  }
-  ```
-
-- **Request Body:**
-
-  ```json
-  {
-      "username": "<username>",
-      "password": "<password>"
-  }
-  ```
-  
-  **Response Body:**
-  
-  - With valid username and password:
-	  ```json
-	  {
-		    "token": "<token>"
-	  }
-	  ```
-
-  - With invalid username and password: `200 No token available for specified username/password.`
-
-    *NOTE:* The response code should be changed to an error code, not 200.
-  
----
-
-#### `/auth` | `POST` 
-
-Returns and attaches token to specified username and password.
-
-**Request Body:**
-
-```json
-{
-    "username": "username",
-    "password": "<password>"
-}
-```
-
-**Response Body:**
-- With valid username and password:
-  ```json
-  {
-      "token": "<token>"
-  }
-  ```
-
-- With invalid username and password: `200 Invalid username/password specified.`
-
-  *NOTE:* The response code should be changed to an error code, not 200.
-
-## Installation
-
-  - cd to volttron repository root
-  - Clone repository into the volttron repository
-  
-    `git clone git@github.com:VOLTTRON-UI-API/volttron-ui-api.git`
-    
-    or
-    
-    `git clone https://github.com/VOLTTRON-UI-API/volttron-ui-api.git`
- 
- - Activate volttron environment
-  
-    `. env/bin/activate`
-    
-  - Start volttron
-  
-    `./start-volttron` (or another method)
-    
-  - Run install-agent (`--start` and `--enable` optional)
-  
-    `python scripts/install-agent.py -s volttron-ui-api -c volttron-ui-api/config -t uiapi --start --enable`
-    
-  - Test agent (once running) at `https://<host>:8443/helloworld`
